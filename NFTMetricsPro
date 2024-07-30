@@ -1,0 +1,85 @@
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+class NFTMetricsPro:
+    def __init__(self):
+        self.api_url = 'https://api.opensea.io/api/v1'
+
+    def get_collection_sales(self, collection_slug: str, days: int = 30) -> pd.DataFrame:
+        """Fetches sales data for a specific NFT collection."""
+        url = f"{self.api_url}/assets"
+        params = {
+            'order_direction': 'desc',
+            'offset': 0,
+            'limit': 50,
+            'collection': collection_slug,
+            'order_by': 'price',
+        }
+        response = requests.get(url, params=params)
+        data = response.json().get('assets', [])
+        sales_data = []
+
+        for item in data:
+            if 'last_sale' in item and item['last_sale']:
+                sales_data.append({
+                    'timestamp': item['last_sale']['event_timestamp'],
+                    'price': float(item['last_sale']['total_price']) / 10**18  # Convert from wei to ETH
+                })
+
+        df = pd.DataFrame(sales_data)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        return df
+
+    def plot_sales_trends(self, collection_slug: str, days: int = 30):
+        """Plots sales trends for a specific NFT collection."""
+        df = self.get_collection_sales(collection_slug, days)
+        if df.empty:
+            print("No sales data found.")
+            return
+
+        df.set_index('timestamp', inplace=True)
+        df_resampled = df.resample('D').sum()  # Resample by day and sum up the sales
+        df_resampled['price'].plot(figsize=(12, 6), title=f'Sales Trends for Collection: {collection_slug.capitalize()}')
+        plt.xlabel('Date')
+        plt.ylabel('Total Sales (ETH)')
+        plt.grid(True)
+        plt.show()
+
+    def get_nft_details(self, token_id: str) -> dict:
+        """Fetches details for a specific NFT token."""
+        url = f"{self.api_url}/assets"
+        params = {
+            'token_ids': token_id,
+            'order_direction': 'asc',
+            'limit': 1
+        }
+        response = requests.get(url, params=params)
+        return response.json().get('assets', [{}])[0]
+
+    def display_nft_details(self, token_id: str):
+        """Displays details for a specific NFT token."""
+        nft_details = self.get_nft_details(token_id)
+        if not nft_details:
+            print("No NFT details found.")
+            return
+
+        print(f"NFT Details for Token ID {token_id}:")
+        print(f"Name: {nft_details.get('name', 'N/A')}")
+        print(f"Description: {nft_details.get('description', 'N/A')}")
+        print(f"Current Price: {float(nft_details.get('last_sale', {}).get('total_price', 0)) / 10**18} ETH")
+        print(f"Owner: {nft_details.get('owner', {}).get('user', {}).get('username', 'N/A')}")
+        print(f"Image URL: {nft_details.get('image_url', 'N/A')}")
+
+# Example Usage
+if __name__ == "__main__":
+    nft_metrics_pro = NFTMetricsPro()
+
+    # Plot Sales Trends for a Collection
+    collection_slug = 'boredapeyachtclub'  # Example collection slug
+    nft_metrics_pro.plot_sales_trends(collection_slug, days=30)
+
+    # Display NFT Details for a Specific Token
+    token_id = '1'  # Example token ID
+    nft_metrics_pro.display_nft_details(token_id)
